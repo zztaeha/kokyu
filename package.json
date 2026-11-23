@@ -1,0 +1,69 @@
+{
+  "name": "kokyu",
+  "version": "0.1.0",
+  "description": "Fast deflate, zlib, gzip and zip compression and decompression.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./build/engine/index.d.ts",
+      "default": "./build/engine/index.js"
+    }
+  },
+  "types": "./build/engine/index.d.ts",
+  "files": [
+    "build/engine"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Taeha (zztaeha)",
+    "url": "https://zztaeha.dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zztaeha/kokyu.git"
+  },
+  "homepage": "https://zztaeha.dev/kokyu/",
+  "bugs": {
+    "url": "https://github.com/zztaeha/kokyu/issues"
+  },
+  "keywords": [
+    "gzip",
+    "gunzip",
+    "deflate",
+    "inflate",
+    "zlib",
+    "zip",
+    "unzip",
+    "compression",
+    "decompression",
+    "compress",
+    "decompress",
+    "stream",
+    "async",
+    "worker",
+    "non-blocking",
+    "browser",
+    "node",
+    "deno",
+    "bun",
+    "typescript",
+    "esm",
+    "crc32",
+    "adler32",
+    "fast"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit false --rootDir src --outDir build",
+    "test": "npm run build && node --test build/tests/",
+    "bench": "npm run build && node build/tests/bench.js",
+    "size": "npm run build && node build/tests/size.js",
+    "versus": "npm run build && node build/tests/versus.js",
+    "test:runtimes": "npm run build && node build/tests/runtimes.js"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "fflate": "^0.8.3",
+    "typescript": "^7.0.2"
+  }
+}
