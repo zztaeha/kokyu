@@ -467,3 +467,26 @@ test('decoders don\'t check checksums, inline or in a worker, except to find whe
     }
   }
 })
+
+// Gigabytes of memory, so only with BIG=1
+test('past 2 GiB in one call, and past 1 GiB in a stream, deflate still finds its matches', { skip: !process.env['BIG'] }, () => {
+  const MB = 1 << 20
+  const big = new Uint8Array(2 ** 31 + 64 * MB)
+  for (let i = 0; i < big.length; i += 4093) big[i] = i & 255
+  // Bytes per MB on the first 64 MB, which every size should keep to
+  const rate = k.deflate(big.subarray(0, 64 * MB)).length / 64
+  const packed = k.deflate(big)
+  assert.ok(packed.length < rate * (big.length / MB) * 1.1, `${packed.length} B one-shot, ${rate.toFixed(0)} B per MB expected`)
+  same(k.inflate(packed), big, 'one-shot')
+
+  const s = k.deflateStream()
+  const chunk = big.subarray(0, 16 * MB)
+  const parts: Uint8Array[] = []
+  for (let i = 0; i < 72; i++) parts.push(s.push(chunk))
+  parts.push(s.finish())
+  const streamed = cat(parts)
+  assert.ok(streamed.length < rate * 72 * 16 * 1.1, `${streamed.length} B streamed`)
+  const back = k.inflate(streamed)
+  assert.equal(back.length, 72 * chunk.length)
+  for (let i = 0; i < 72; i++) same(back.subarray(i * chunk.length, (i + 1) * chunk.length), chunk, `streamed chunk ${i}`)
+})

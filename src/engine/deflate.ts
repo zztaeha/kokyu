@@ -106,6 +106,15 @@ const hashOf = (w: number): number => Math.imul(w, 0x9E3779B1) >>> (32 - HASH_BI
 // the base past all they stored, which drops every older entry below the search limit without clearing.
 interface Tables { head: Int32Array; prev: Int32Array; syms: Int32Array; base: number }
 
+// An Int32Array holds below 2^31, so once base + position passes 2^30 every entry moves down by the same amount:
+// positions still in the window stay above the search limit, older ones reach 0
+const REBASE = 1 << 30
+const rebase = (tb: Tables, i: number): void => {
+  const d = tb.base + i - WINDOW - 1
+  for (const a of [tb.head, tb.prev]) for (let j = 0; j < a.length; j++) a[j] = Math.max(0, a[j]! - d)
+  tb.base -= d
+}
+
 const newTables = (): Tables => ({ head: new Int32Array(1 << HASH_BITS), prev: new Int32Array(WINDOW), syms: new Int32Array(BLOCK), base: 0 })
 
 // Positions [from, to) into the hash chains
@@ -136,11 +145,13 @@ const ownTables = (): Tables => {
 
 interface LoopState { pos: number; n: number; extra: number; held: number; heldDist: number; miss: number; blockStart: number }
 
-// The match loop, outside the deflater's closure: V8 runs it 10 to 25% slower as a closure
+// The match loop, outside the deflater's closure: V8 runs it 10 to 25% slower as a closure. It stops at the end of a
+// block once the chains need a rebase, and returns true to be called again: a base fixed for the loop keeps it fast.
 function matchLoop(
   st: LoopState, tb: Tables, data: Uint8Array, end: number, mode: number, level: number, lf: Uint32Array, df: Uint32Array,
   emit: (upTo: number, symbols: number, extra: number) => void,
-): void {
+): boolean {
+  if (tb.base + st.pos > REBASE) rebase(tb, st.pos)
   const { head, prev, syms, base } = tb
   const [chain, nice, good, lazy, scan] = LEVELS[level - 1]!
   const view = viewOf(data), top = end - HASH_LEN + 1
@@ -254,6 +265,7 @@ function matchLoop(
       emit(upTo, k, x)
       k = x = 0
       bs = upTo
+      if (base + i > REBASE) break
     }
   }
 
@@ -263,6 +275,8 @@ function matchLoop(
   st.held = h0
   st.heldDist = hd
   st.miss = m
+  st.blockStart = bs
+  return i < stop
 }
 
 export interface Deflater {
@@ -422,7 +436,8 @@ export function deflater(level: number, dictionary?: Uint8Array, head: Uint8Arra
       return
     }
     const st: LoopState = { pos, n, extra, held, heldDist, miss, blockStart }
-    matchLoop(st, t ??= ownTables(), buf, end, mode, level, litFreq, distFreq, (upTo, k, x) => { n = k; extra = x; emitBlock(false, upTo) })
+    const tb = t ??= ownTables()
+    while (matchLoop(st, tb, buf, end, mode, level, litFreq, distFreq, (upTo, k, x) => { n = k; extra = x; emitBlock(false, upTo) }));
     ;({ pos, n, extra, held, heldDist, miss } = st)
     if (mode === FINAL) {
       emitBlock(true, end)
@@ -438,8 +453,8 @@ export function deflater(level: number, dictionary?: Uint8Array, head: Uint8Arra
   const append = (chunk: Uint8Array): void => {
     const n = chunk.length
     if (end + n > buf.length) {
-      // Slide by whole windows so `prev`, indexed by position & WMASK, keeps its layout. Level 0 never looks back, so
-      // it keeps no window and has no tables to line up.
+      // Slide by whole windows so `prev`, indexed by position & WMASK, keeps its layout, and raise the base by as much
+      // so every entry still names the same bytes. Level 0 never looks back, so it keeps no window and no tables.
       const keep = level ? Math.min(run, pos - WINDOW) : blockStart
       const shift = level ? keep - (keep & WMASK) : keep
       if (shift > 0) {
@@ -448,7 +463,7 @@ export function deflater(level: number, dictionary?: Uint8Array, head: Uint8Arra
         pos -= shift
         blockStart -= shift
         run -= shift
-        if (t) for (const a of [t.head, t.prev]) for (let j = 0; j < a.length; j++) a[j] = Math.max(0, a[j]! - shift)
+        if (t) t.base += shift
       }
       buf = grow(buf, end, n)
     }
