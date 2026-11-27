@@ -1,6 +1,6 @@
 {
   "name": "kokyu",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Fast deflate, zlib, gzip and zip compression and decompression.",
   "type": "module",
   "exports": {

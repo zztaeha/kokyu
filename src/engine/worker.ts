@@ -73,6 +73,7 @@ if (typeof scope.postMessage === 'function') {
   scope.onmessage = e => answer(e.data, (r, t) => scope.postMessage!(r, t))
 } else {
   const spec: string = 'node:worker_threads'
-  const { parentPort } = await import(spec) as { parentPort: { on(ev: 'message', fn: (m: Message) => void): void; postMessage(m: unknown, t: ArrayBuffer[]): void } }
-  parentPort.on('message', m => answer(m, (r, t) => parentPort.postMessage(r, t)))
+  // No top-level await: Vite bundles workers in a format that can't hold one.
+  import(spec).then(({ parentPort }: { parentPort: { on(ev: 'message', fn: (m: Message) => void): void; postMessage(m: unknown, t: ArrayBuffer[]): void } }) =>
+    parentPort.on('message', m => answer(m, (r, t) => parentPort.postMessage(r, t))))
 }
